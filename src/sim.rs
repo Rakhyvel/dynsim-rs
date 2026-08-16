@@ -7,6 +7,7 @@ use crate::{particle::Particle, state::State};
 
 type Vec2 = Vector2<f64>;
 
+#[derive(Clone)]
 pub struct Sim {
     particles: Vec<Particle>,
 
@@ -17,8 +18,8 @@ pub struct Sim {
 }
 
 impl Sim {
-    pub fn new(num_particles: usize, width: usize, height: usize) -> Self {
-        let mut rng = StdRng::seed_from_u64(42);
+    pub fn new(num_particles: usize, seed: u64, width: usize, height: usize) -> Self {
+        let mut rng = StdRng::seed_from_u64(seed);
 
         let mut particles = vec![];
 

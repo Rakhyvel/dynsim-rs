@@ -1,13 +1,13 @@
-mod particle;
-mod sim;
-mod state;
+pub mod particle;
+pub mod sim;
+pub mod state;
 
 use macroquad::prelude::*;
 
 use crate::sim::Sim;
 
-const WIDTH: usize = 1536;
-const HEIGHT: usize = 768;
+pub const WIDTH: usize = 1536;
+pub const HEIGHT: usize = 768;
 
 fn window_conf() -> Conf {
     Conf {
@@ -21,7 +21,7 @@ fn window_conf() -> Conf {
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    let mut sim = Sim::new(500, WIDTH, HEIGHT);
+    let mut sim = Sim::new(1000, 42, WIDTH, HEIGHT);
 
     let mut image = Image::gen_image_color(WIDTH as u16, HEIGHT as u16, BLACK);
     let texture = Texture2D::from_image(&image);
