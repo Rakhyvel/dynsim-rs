@@ -6,8 +6,8 @@ use macroquad::prelude::*;
 
 use crate::sim::Sim;
 
-const WIDTH: usize = 800;
-const HEIGHT: usize = 600;
+const WIDTH: usize = 1536;
+const HEIGHT: usize = 768;
 
 fn window_conf() -> Conf {
     Conf {

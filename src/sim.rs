@@ -19,14 +19,33 @@ impl Sim {
         let mut particles = vec![];
 
         for _ in 0..num_particles {
-            let pos =
-                Vector2::new(rng.random_range(-1.0..=1.0), rng.random_range(-1.0..=1.0)) * 500.0;
+            let pos = Vector2::new(
+                rng.random_range(-1.0..=1.0) - 0.2,
+                rng.random_range(-1.0..=1.0),
+            ) * 400.0;
 
             particles.push(Particle {
                 state: State {
                     pos,
-                    ..Default::default()
+                    vel: Vector2::new(0.0, 4.5),
                 },
+                color: 1.0,
+                ..Default::default()
+            });
+        }
+
+        for _ in 0..num_particles {
+            let pos = Vector2::new(
+                rng.random_range(-1.0..=1.0) + 0.2,
+                rng.random_range(-1.0..=1.0),
+            ) * 400.0;
+
+            particles.push(Particle {
+                state: State {
+                    pos,
+                    vel: Vector2::new(0.0, -4.5),
+                },
+                color: -1.0,
                 ..Default::default()
             });
         }
@@ -44,6 +63,8 @@ impl Sim {
     }
 
     pub fn update(&mut self) {
+        let mut avg_colors: Vec<(f64, i32)> = (0..self.particles.len()).map(|_| (0.0, 0)).collect();
+
         // Find each particles acceleration wrt every other particle
         for i in 0..self.particles.len() {
             for j in 0..self.particles.len() {
@@ -55,21 +76,28 @@ impl Sim {
                 let this_particle = &self.particles[i];
                 let other_particle = &self.particles[j];
 
-                // Calculate the acceleration between these two particles with inverse square law
                 const MU: f64 = 200.0;
+                const K: f64 = 2.0; // kinda chosen arbitarily, to counter gravitational forces at max contact
+                const C: f64 = 1.0; // not sure what this does
+                const R: f64 = 100.0;
+
+                // Calculate the acceleration between these two particles with inverse square law
                 let to_other = other_particle.state.pos - this_particle.state.pos;
-                let to_other_norm = to_other.normalize();
+                let n_hat = to_other.normalize();
                 let vel_diff = other_particle.state.vel - this_particle.state.vel;
                 let dist_squared = to_other.magnitude_squared();
-                let speed_diff = to_other_norm.dot(&vel_diff);
+                let speed_diff = n_hat.dot(&vel_diff);
 
-                let factor: f64 = if dist_squared < 100.0 {
-                    // Add repulsive force
-                    speed_diff - 0.2 * (100.0 - dist_squared)
+                let gravity = MU / dist_squared;
+                let dashpot = if dist_squared < R {
+                    avg_colors[i].0 += other_particle.color;
+                    avg_colors[i].1 += 1;
+                    C * speed_diff - K * (R - dist_squared)
                 } else {
-                    MU / dist_squared
+                    0.0
                 };
-                self.particles[i].accel += factor * to_other_norm;
+
+                self.particles[i].accel += (gravity + dashpot) * n_hat;
             }
         }
 
@@ -79,6 +107,10 @@ impl Sim {
             this_particle.state.vel += this_particle.accel * 0.1;
             this_particle.state.pos += this_particle.state.vel * 0.1;
             this_particle.accel = Vector2::new(0.0, 0.0);
+
+            if avg_colors[i].1 > 0 {
+                this_particle.color = (avg_colors[i].0) / (avg_colors[i].1) as f64;
+            }
         }
     }
 
@@ -101,7 +133,11 @@ impl Sim {
             }
 
             let idx = (y as usize * self.width + x as usize) * 4;
-            self.pixels[idx..idx + 4].copy_from_slice(&[255, 255, 255, 255]);
+            let r = (255.0 * (1.0 + p.color).min(1.0)) as u8;
+            let g = (255.0 * (1.0 - p.color.abs())) as u8;
+            let b = (255.0 * (1.0 - p.color).min(1.0)) as u8;
+
+            self.pixels[idx..idx + 4].copy_from_slice(&[r, g, b, 255]);
         }
     }
 }

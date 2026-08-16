@@ -8,4 +8,5 @@ use crate::state::State;
 pub struct Particle {
     pub state: State,
     pub accel: Vector2<f64>,
+    pub color: f64,
 }
