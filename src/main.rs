@@ -32,7 +32,9 @@ async fn main() {
             break;
         }
 
-        sim.update();
+        for _ in 0..10 {
+            sim.update();
+        }
         sim.render();
 
         image.bytes.copy_from_slice(sim.pixels());
