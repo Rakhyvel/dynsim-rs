@@ -1,7 +1,7 @@
-use std::f64::consts::PI;
+use std::f64::consts::{PI, TAU};
 
 use nalgebra::Vector2;
-use rand::{RngExt, SeedableRng, rngs::StdRng};
+use rand::{Rng, RngExt, SeedableRng, rngs::StdRng};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 type Vec2 = Vector2<f64>;
@@ -19,30 +19,12 @@ pub struct Sim {
 }
 
 impl Sim {
+    const MU: f64 = 200.0;
+
     pub fn new(num_particles: usize, seed: u64, width: usize, height: usize) -> Self {
         let mut rng = StdRng::seed_from_u64(seed);
 
-        let mut pos = vec![];
-        let mut vel = vec![];
-        let mut acc = vec![];
-
-        for _ in 0..num_particles {
-            pos.push(Vec2::new(
-                100.0 * (rng.random_range(-1.0..=1.0) - 3.4),
-                100.0 * (rng.random_range(-1.0..=1.0) - 3.4),
-            ));
-            vel.push(Vec2::new(10.0, 0.0));
-            acc.push(Vec2::new(0.0, 0.0));
-        }
-
-        for _ in 0..num_particles {
-            pos.push(Vec2::new(
-                100.0 * (rng.random_range(-1.0..=1.0)),
-                100.0 * (rng.random_range(-1.0..=1.0)),
-            ));
-            vel.push(Vec2::new(0.0, 0.0));
-            acc.push(Vec2::new(0.0, 0.0));
-        }
+        let (pos, vel, acc) = Self::setup_protodisk(num_particles, &mut rng);
 
         Self {
             pos,
@@ -54,14 +36,79 @@ impl Sim {
         }
     }
 
+    fn setup_smash(num_particles: usize, rng: &mut impl Rng) -> (Vec<Vec2>, Vec<Vec2>, Vec<Vec2>) {
+        let mut pos = vec![];
+        let mut vel = vec![];
+        let mut acc = vec![];
+
+        const ENTER: f64 = 40.0;
+        const SPEED: f64 = 500.0;
+        const MISS: f64 = 0.3;
+        const COMP: f64 = 1.0;
+
+        for _ in 0..num_particles {
+            pos.push(Vec2::new(
+                20.0 * (rng.random_range(-1.0..=1.0) + ENTER),
+                20.0 * (rng.random_range(-1.0..=1.0) + MISS),
+            ));
+            vel.push(Vec2::new(-SPEED, 0.0));
+            acc.push(Vec2::new(0.0, 0.0));
+        }
+        for _ in 0..(num_particles as f64 * COMP) as usize {
+            pos.push(Vec2::new(
+                20.0 * (rng.random_range(-1.0..=1.0) - ENTER),
+                20.0 * (rng.random_range(-1.0..=1.0) - MISS),
+            ));
+            vel.push(Vec2::new(SPEED, 0.0));
+            acc.push(Vec2::new(0.0, 0.0));
+        }
+
+        (pos, vel, acc)
+    }
+
+    fn setup_protodisk(
+        num_particles: usize,
+        rng: &mut impl Rng,
+    ) -> (Vec<Vec2>, Vec<Vec2>, Vec<Vec2>) {
+        const RADII: f64 = 10.0;
+
+        // create a vec of random (r, theta) points, sorted by r
+        let mut pos_r: Vec<(f64, f64)> = (0..num_particles)
+            .map(|_| {
+                let r = rng.random_range(0.0..1.0) * RADII;
+                let theta = rng.random_range(0.0..TAU);
+                (r, theta)
+            })
+            .collect();
+        pos_r.sort_by(|(r1, _), (r2, _)| r1.total_cmp(r2));
+
+        (
+            // pos: convert radial to cartesian
+            pos_r
+                .iter()
+                .map(|(r, theta)| Vec2::new(theta.cos() * r, theta.sin() * r))
+                .collect(),
+            // vel: give particles more circular orbits as they get further out
+            pos_r
+                .iter()
+                .enumerate()
+                .map(|(k, (r, theta))| {
+                    let v_circ = (Self::MU * k as f64 / r).sqrt();
+                    Vec2::new(v_circ * -theta.sin(), v_circ * theta.cos())
+                })
+                .collect(),
+            // acc: zero starting acc
+            (0..num_particles).map(|_| Vec2::zeros()).collect(),
+        )
+    }
+
     pub fn pixels(&self) -> &[u8] {
         &self.pixels
     }
 
     pub fn update(&mut self) {
-        const MU: f64 = 200.0;
-        const K: f64 = 5.0; // kinda chosen arbitarily, to counter gravitational forces at max contact
-        const R: f64 = 5.0;
+        const K: f64 = 2.0; // kinda chosen arbitarily, to counter gravitational forces at max contact
+        const R: f64 = 3.5;
 
         // Derive restitution
         let e: f64 = 0.4; // elasticity, I think
@@ -95,9 +142,9 @@ impl Sim {
 
                         let gravity: Vec2 = if delta > 0.0 {
                             // interior, use a softened gravity
-                            MU * d / (2.0 * R).powi(3)
+                            Self::MU * d / (2.0 * R).powi(3)
                         } else {
-                            MU / d2
+                            Self::MU / d2 // cant be div by zero, otherwise delta would be positive
                         } * n_hat;
 
                         let dashpot = if delta > 0.0 {
@@ -146,16 +193,29 @@ impl Sim {
         let half_h = self.height as f64 / 2.0;
 
         for pos in &self.pos {
-            let x = (pos.x + half_w) as isize;
-            let y = (pos.y + half_h) as isize;
+            let x = (pos.x * 1.0 + half_w) as isize;
+            let y = (pos.y * 1.0 + half_h) as isize;
 
             if x < 0 || x >= self.width as isize || y < 0 || y >= self.height as isize {
                 continue;
             }
 
-            let idx = (y as usize * self.width + x as usize) * 4;
+            const BASE: u8 = 128;
+            const PIXEL: usize = 3;
+            const ANTI_ALIAS: u8 = ((256 - BASE as usize) / (PIXEL * PIXEL)) as u8;
 
-            self.pixels[idx..idx + 4].copy_from_slice(&[255, 255, 255, 255]);
+            let x: usize = (x as usize / PIXEL) * PIXEL;
+            let y: usize = (y as usize / PIXEL) * PIXEL;
+
+            for i in 0..PIXEL {
+                for j in 0..PIXEL {
+                    let idx = ((y + j) * self.width + x + i) * 4;
+                    for x in &mut self.pixels[idx..idx + 3] {
+                        *x = (BASE.saturating_sub(ANTI_ALIAS)).max(*x);
+                        *x = x.saturating_add(ANTI_ALIAS);
+                    }
+                }
+            }
         }
     }
 }

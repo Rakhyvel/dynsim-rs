@@ -1,13 +1,11 @@
-pub mod particle;
 pub mod sim;
-pub mod state;
 
 use macroquad::prelude::*;
 
 use crate::sim::Sim;
 
-pub const WIDTH: usize = 1536;
-pub const HEIGHT: usize = 768;
+pub const WIDTH: usize = 1920 / 2;
+pub const HEIGHT: usize = 1080 / 2;
 
 fn window_conf() -> Conf {
     Conf {
