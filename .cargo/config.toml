@@ -1,0 +1,4 @@
+# Equivalent of the C++ version's -march=native.
+# Binaries built this way are not portable to other CPUs.
+[build]
+rustflags = ["-C", "target-cpu=native"]
